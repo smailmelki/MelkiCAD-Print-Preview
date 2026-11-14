@@ -1,0 +1,7 @@
+{
+  "appId": "com.smailmelki.melkicadprint",
+  "appName": "MelkiCAD Print",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "server": { "androidScheme": "https" }
+}
