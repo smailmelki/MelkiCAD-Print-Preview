@@ -1,0 +1,70 @@
+name: Build MelkiCAD Print Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'index.html'
+      - 'css/**'
+      - 'js/**'
+      - 'fonts/**'
+      - 'android-wrapper/**'
+      - '.github/workflows/android-apk.yml'
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Capacitor dependencies
+        working-directory: android-wrapper
+        run: npm install
+      - name: Prepare offline web application
+        working-directory: android-wrapper
+        run: |
+          mkdir -p www
+          cp -a ../index.html ../css ../js ../fonts ../manifest.json ../sw.js ../icon-192.png ../icon-512.png ../icon-maskable-512.png www/
+          sed -i "s/^const VER='[^']*';/const VER='print-${GITHUB_SHA::8}';/" www/sw.js
+          npx esbuild android-bridge.js --bundle --format=iife --outfile=www/android-bridge.bundle.js
+          node -e 'const fs=require("fs");const p="www/index.html";let s=fs.readFileSync(p,"utf8");if(!s.includes("android-bridge.bundle.js")){s=s.replace("</body>","<script src=\"android-bridge.bundle.js\"></script>\\n</body>");fs.writeFileSync(p,s)}'
+      - name: Add Android platform
+        working-directory: android-wrapper
+        run: npx cap add android
+      - name: Install native file-save plugin
+        working-directory: android-wrapper
+        run: |
+          mkdir -p android/app/src/main/java/com/smailmelki/melkicadprint
+          cp native/android/*.java android/app/src/main/java/com/smailmelki/melkicadprint/
+      - name: Sync Capacitor
+        working-directory: android-wrapper
+        run: npx cap sync android
+      - name: Build installable debug APK
+        working-directory: android-wrapper/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MelkiCAD-Print-Preview-Android-APK
+          path: android-wrapper/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
